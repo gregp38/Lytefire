@@ -13,7 +13,7 @@
 //-----------------Encodeur chassis --------------------------//
 // Entrées
 #define  A_PHASE 2            // Phase A sur le pin n°2
-#define  B_PHASE 3            // Phase B sur le pin n°2
+#define  B_PHASE 3            // Phase B sur le pin n°3
 // Sorties
 #define  MOTOR 13             // petit moteur test
 
