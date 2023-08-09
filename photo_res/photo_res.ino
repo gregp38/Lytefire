@@ -11,7 +11,7 @@ int tolerance = 40;// constante à définir pour ne pas déclencher le moteur so
 int val1, val2, diff, mean;// définition de variables (photorésistance 1, photorésistance 2, différence entre les deux. 
 
 int motor_speed = 60;
-int delay_ok    = 4000;
+int delay_ok    = 3*60*1000;
 int delay_diff  = 500;
 bool dir        = true;
 
