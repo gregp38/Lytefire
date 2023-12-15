@@ -87,6 +87,7 @@ void loop()
 	// Transmission au moniteur série des valeurs obtenues
   #if PRINT_ENABLE  
 	  Serial.println("MODE AUTO:");
+    Serial.println("asservissement azymut : ");
 	  Serial.print("azymut_sens0_A0 = ");
     Serial.println(val1);
 	  Serial.print("azymut_sens1_A0 = ");
@@ -107,7 +108,7 @@ void loop()
 	  
 	  // Transmission au moniteur série des valeurs obtenues
     #if PRINT_ENABLE 	  
-	    Serial.println("Saturation detected - switch to A1:");
+	    Serial.println("Saturation détectée - acquisition du deuxième pont diviseur:");
       Serial.print("azymut_sens0_A0 = ");
       Serial.println(val1);
 	    Serial.print("azymut_sens1_A0 = ");
@@ -132,11 +133,11 @@ void loop()
   //Si on détecte une ombre
   if(abs(diff)>tolerance){    
     #if PRINT_ENABLE 
-      Serial.println("Ombre détectée sur l'azumut, le système va bouger vers la :");  
+      Serial.print("Ombre détectée sur l'azumut, le système va bouger vers la :");  
       if (diff > 0) {
-        Serial.print("   GAUCHE");  
+        Serial.println("   GAUCHE");  
       }else{
-        Serial.print("   DROITE");  
+        Serial.println("   DROITE");  
       }
     #endif 
     
@@ -154,7 +155,7 @@ void loop()
   // Sinon on ne détecte pas d'ombre
   } else {
     #if PRINT_ENABLE     
-      Serial.println("Aucune ombre détectée en azumut !! ");
+      Serial.println("Aucune ombre détectée en azymut !! ");
     #endif
     
     // On stoppe le moteur azumut
@@ -166,10 +167,85 @@ void loop()
     ////////////////////////////////////////////////////////////
     //           TODO: asservissement elevation               //
     ////////////////////////////////////////////////////////////
+    // Acquisition de la tension aux bornes du premier pont diviseur
+    val1 = analogRead(elev_sens0_A0); 
+    val2 = analogRead(elev_sens1_A0);
+      
+    mean = (val1+val2)/2;
+
+    // Transmission au moniteur série des valeurs obtenues
+    #if PRINT_ENABLE  
+      Serial.println("asservissement élévation : ");
+      Serial.print("elev_sens0_A0 = ");
+      Serial.println(val1);
+      Serial.print("elev_sens1_A0 = ");
+      Serial.println(val2);		  
+      Serial.print("mean = ");
+      Serial.println(mean);
+      Serial.println("");
+    #endif 
     
-    // on attend un délai lent de rafraichissement du programme,
-    // car le système est stabilisé et le soleil se déplace lentemment
-    delay(delay_ok);  
+    // Si une saturation est détectée alors on utilise le deuxième pont diviseur
+    if (mean > mean_high or mean < mean_low){
+      
+      // Acquisition de la tension aux bornes du deuxième pont diviseur
+      val1 = analogRead(elev_sens0_A1);
+      val2 = analogRead(elev_sens1_A1);
+      
+      mean = (val1+val2)/2;
+      
+      // Transmission au moniteur série des valeurs obtenues
+      #if PRINT_ENABLE 	  
+        Serial.println("Saturation détectée - acquisition du deuxième pont diviseur:");
+        Serial.print("elev_sens0_A0 = ");
+        Serial.println(val1);
+        Serial.print("elev_sens1_A0 = ");
+        Serial.println(val2);		  
+        Serial.print("mean = ");
+        Serial.println(mean);
+        Serial.println("");
+      #endif
+    }
+    
+    // Pour éviter que le système oscille (alterne entre phase de movement et stable),
+    // on défini une tolérance dynamique qui correspond à 20% d'écart à la moyenne entre les 2 tensions des 2 photorésistances
+    tolerance = mean*0.2;  
+    diff      = val2-val1;
+    dir       = (diff >= tolerance);
+    
+    #if PRINT_ENABLE 	    
+      Serial.print("diff = ");
+      Serial.println(diff);
+    #endif 
+    
+    //Si on détecte une ombre
+    if(abs(diff)>tolerance){    
+      #if PRINT_ENABLE 
+        Serial.print("Ombre détectée sur l'azumut, le système va bouger vers le :");  
+        if (diff > 0) {
+          Serial.println("   HAUT");  
+        }else{
+          Serial.println("   BAS");  
+        }
+      #endif 
+      
+      // alors on contrôle du moteur elev par PWM
+      #if MOTOR_ENABLE
+        motor_control (false, dir, motor_speed);
+      #endif
+     
+      // on attend un délai court de rafraichissement du programme,
+      // pour être réactif pour stopper les moteurs lorsque il n'y a plus d'ombre
+      delay(delay_diff); 
+    } else {
+    ////////////////////////////////////////////////////////////
+    //           TODO: asservissement elevation               //
+    ////////////////////////////////////////////////////////////
+    
+      // on attend un délai lent de rafraichissement du programme,
+      // car le système est stabilisé et le soleil se déplace lentemment
+      delay(delay_ok);
+    }      
   }
  
   } else {
@@ -236,7 +312,7 @@ void elevation_motor_control ( bool is_up, int speed) {
 
 void motor_control ( bool is_azymut, bool dir, int speed) {
   
-  // les moteurs azymut ou élévation sont activés indépendamment,
+  // les moteurs azymut ou élévation sont activés indépendemment,
   // on arrête l'autre si on veut activé l'un
   if (is_azymut) {
     elevation_motor_control(true, 0);
