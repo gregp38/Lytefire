@@ -1,121 +1,248 @@
-int RPWM_Output = 8; // Arduino PWM output pin 8; connect to IBT-2 pin 1 (RPWM)
-int LPWM_Output = 6; // Arduino PWM output pin 6; connect to IBT-2 pin 2 (LPWM)
+// Définition des pins digitales de sortie de contrôle PWM des moteurs
+int azymut_RPWM_Output = 8; // Arduino PWM output pin 8; connect to IBT-2 pin 1 (RPWM)
+int azymut_LPWM_Output = 6; // Arduino PWM output pin 6; connect to IBT-2 pin 2 (LPWM)*
 
-int sens1_A0 = A0; 
-int sens1_A1 = A1; 
-int sens2_A0 = A2; 
-int sens2_A1 = A3; 
+int elev_RPWM_Output = 9; // Arduino PWM output pin 8; connect to IBT-2 pin 1 (RPWM)
+int elev_LPWM_Output = 7; // Arduino PWM output pin 6; connect to IBT-2 pin 2 (LPWM)
 
+// Définition des pins digitales des entrées des capteurs pour le contrôle automatique 
+int azymut_sens0_A0 = A0; 
+int azymut_sens0_A1 = A1; 
+int azymut_sens1_A0 = A2; 
+int azymut_sens1_A1 = A3; 
+
+int elev_sens0_A0 = A4; 
+int elev_sens0_A1 = A5; 
+int elev_sens1_A0 = A6; 
+int elev_sens1_A1 = A7; 
+
+// Définition des pins digitales des entrées des capteurs pour le contrôle manuel
+int TOR_high  = 15; 
+int TOR_low   = 14;
 int TOR_mode  = 13; 
 int TOR_left  = 12; 
 int TOR_right = 11; 
+ 
 
-int tolerance = 60;// constante à définir pour ne pas déclencher le moteur sous ce seuil
-int val1, val2, diff, mean;// définition de variables (photorésistance 1, photorésistance 2, différence entre les deux. 
+// Définition de variables servant au mode automatique
+int val1, val2, diff, mean, tolerance;		// permet de choisir entre les deux ponts diviseurs du shadowbend 
+int mean_low 	  = 300;
+int mean_high 	= 700;
 
-int motor_speed = 100;
-long int delay_ok    = 5000; //5s in ms
-int delay_diff  = 200;
-bool dir        = true;
+int motor_speed 	  = 100;		// vitesse moteur (valeur 8-bits: 0 à 255)
+long int delay_ok   = 5000; 	// delai de rafraichissement du programme lorsque le shadowbend ne détecte pas d'ombre (lent  : 5s in ms)
+int delay_diff  	  = 200;    // delai de rafraichissement du programme lorsque le shadowbend détecte une ombre      (rapide: 0.2s in ms)
+bool dir          	= true;
 
 #define MOTOR_ENABLE 1
-
+#define PRINT_ENABLE 1  
 #define MODE_AUTO 0
 
 void setup() 
 {  
-  pinMode(RPWM_Output, OUTPUT);
-  pinMode(LPWM_Output, OUTPUT);
+  // Initialisation des entrées/sorties
+  pinMode(azymut_RPWM_Output, OUTPUT);
+  pinMode(azymut_LPWM_Output, OUTPUT);
+  pinMode(elev_RPWM_Output, OUTPUT);
+  pinMode(elev_LPWM_Output, OUTPUT);
   
-  pinMode(sens1_A0, INPUT);
-  pinMode(sens1_A1, INPUT);
-  pinMode(sens2_A0, INPUT);
-  pinMode(sens2_A1, INPUT);
-
+  pinMode(azymut_sens0_A0, INPUT);
+  pinMode(azymut_sens0_A1, INPUT);
+  pinMode(azymut_sens1_A0, INPUT);
+  pinMode(azymut_sens1_A1, INPUT);
+  
+  pinMode(elev_sens0_A0, INPUT);
+  pinMode(elev_sens0_A1, INPUT);
+  pinMode(elev_sens1_A0, INPUT);
+  pinMode(elev_sens1_A1, INPUT);
+  
   pinMode(TOR_mode , INPUT_PULLUP);
   pinMode(TOR_left , INPUT_PULLUP);
   pinMode(TOR_right, INPUT_PULLUP);
-        
-  delay(2000); // a 2 secondes de délai 
-  Serial.begin(9600); // vitesse de communication
-  analogWrite(LPWM_Output, 0);
-  analogWrite(RPWM_Output, 0);
+  pinMode(TOR_high , INPUT_PULLUP);
+  pinMode(TOR_low  , INPUT_PULLUP);
+  
+  analogWrite(azymut_LPWM_Output, 0);
+  analogWrite(azymut_RPWM_Output, 0);
+  
+  // Si besoin, initialisation du lien série arduino
+  #if PRINT_ENABLE
+    Serial.begin(9600);                 
+  #endif
+
+  delay(2000);                       
 }  
 
  
 void loop() 
 { 
   if (digitalRead(TOR_mode) == MODE_AUTO) {
-      Serial.println("MODE AUTO");
-      val1 = analogRead(sens1_A0); // lire la valeur analogique en sortie de la photorésistance 1
-      val2 = analogRead(sens2_A0); // lire la valeur analogique en sortie de la photorésistance 2
-      Serial.print("(sens1_a0, sens2_a0)  = ");
-      Serial.print(val1);// on écrit la différence dans le moniteur séries
-      Serial.print(" , ");
-      Serial.println(val2);// on écrit la différence dans le moniteur séries
-      mean = (val1+val2)/2;
-      Serial.print("mean = ");// on écrit la différence dans le moniteur séries
-      Serial.println(mean);// on écrit la différence dans le moniteur séries
-      
-      if (mean > 700 or mean < 300){
-        val1 = analogRead(sens1_A1); // lire la valeur analogique en sortie de la photorésistance 1
-        val2 = analogRead(sens2_A1); // lire la valeur analogique en sortie de la photorésistance 2
-          
-        Serial.println("switch to A1:");
-        Serial.print("(sens1_a1, sens2_a1)  = ");
-        Serial.print(val1);// on écrit la différence dans le moniteur séries
-        Serial.print(" , ");
-        Serial.println(val2);// on écrit la différence dans le moniteur séries
+  
+	// Acquisition de la tension aux bornes du premier pont diviseur
+  val1 = analogRead(azymut_sens0_A0); 
+  val2 = analogRead(azymut_sens1_A0);
+	  
+  mean = (val1+val2)/2;
+
+	// Transmission au moniteur série des valeurs obtenues
+  #if PRINT_ENABLE  
+	  Serial.println("MODE AUTO:");
+	  Serial.print("azymut_sens0_A0 = ");
+    Serial.println(val1);
+	  Serial.print("azymut_sens1_A0 = ");
+    Serial.println(val2);		  
+	  Serial.print("mean = ");
+    Serial.println(mean);
+    Serial.println("");
+	#endif 
+  
+	// Si une saturation est détectée alors on utilise le deuxième pont diviseur
+	if (mean > mean_high or mean < mean_low){
+		
+	  // Acquisition de la tension aux bornes du deuxième pont diviseur
+	  val1 = analogRead(azymut_sens0_A1);
+	  val2 = analogRead(azymut_sens1_A1);
+	  
+	  mean = (val1+val2)/2;
+	  
+	  // Transmission au moniteur série des valeurs obtenues
+    #if PRINT_ENABLE 	  
+	    Serial.println("Saturation detected - switch to A1:");
+      Serial.print("azymut_sens0_A0 = ");
+      Serial.println(val1);
+	    Serial.print("azymut_sens1_A0 = ");
+      Serial.println(val2);		  
+	    Serial.print("mean = ");
+      Serial.println(mean);
+      Serial.println("");
+	  #endif
+	}
+  
+  // Pour éviter que le système oscille (alterne entre phase de movement et stable),
+  // on défini une tolérance dynamique qui correspond à 20% d'écart à la moyenne entre les 2 tensions des 2 photorésistances
+  tolerance = mean*0.2;  
+  diff      = val2-val1;
+  dir       = (diff >= tolerance);
+  
+  #if PRINT_ENABLE 	    
+    Serial.print("diff = ");
+    Serial.println(diff);
+  #endif 
+  
+  //Si on détecte une ombre
+  if(abs(diff)>tolerance){    
+    #if PRINT_ENABLE 
+      Serial.println("Ombre détectée sur l'azumut, le système va bouger vers la :");  
+      if (diff > 0) {
+        Serial.print("   GAUCHE");  
+      }else{
+        Serial.print("   DROITE");  
       }
-      
-      mean = (val1+val2)/2;
-      tolerance = mean*0.2;  // pour éviter des oscillations: on bouge si diff > 20% de la moyenne des 2 capteurs
-      diff = val2-val1;// on calcule la différence
-      dir  = (diff >= tolerance);
+    #endif 
     
-      Serial.print("diff = ");
-      Serial.println(diff);// on écrit la différence dans le moniteur série
-      
-      if(abs(diff)>tolerance){    //Si la différence est en dessous du seuil
-        if (diff > 0) {
-          
-          Serial.print("=> Left");
+    // alors on contrôle du moteur azymut par PWM
     #if MOTOR_ENABLE
-          analogWrite(RPWM_Output, 0);
-          analogWrite(LPWM_Output, motor_speed);
+      motor_control (true, dir, motor_speed);
     #endif
-        }else{
-           Serial.print("=> Right");
-    #if MOTOR_ENABLE
-          analogWrite(LPWM_Output, 0);
-          analogWrite(RPWM_Output, motor_speed);
-    #endif
-        }
-        delay(delay_diff); 
-      } else {                    //Sinon entre -tolerance et +tolerance
-        Serial.println("=> OOOOK");
-    #if MOTOR_ENABLE
-        analogWrite(RPWM_Output, 0);
-        analogWrite(LPWM_Output, 0);
-    #endif
-        delay(delay_ok);  
-      }
-//                      On met un délai pour laisser le temps aux commande   
-       
+    
+
+    
+    // on attend un délai court de rafraichissement du programme,
+    // pour être réactif pour stopper les moteurs lorsque il n'y a plus d'ombre
+    delay(delay_diff); 
+    
+  // Sinon on ne détecte pas d'ombre
   } else {
-  //  Serial.println("MODE MANUEL");
+    #if PRINT_ENABLE     
+      Serial.println("Aucune ombre détectée en azumut !! ");
+    #endif
+    
+    // On stoppe le moteur azumut
+    #if MOTOR_ENABLE
+      motor_control (true, true, 0);
+    #endif
+    
+    // puis on stabilise l'elevation
+    ////////////////////////////////////////////////////////////
+    //           TODO: asservissement elevation               //
+    ////////////////////////////////////////////////////////////
+    
+    // on attend un délai lent de rafraichissement du programme,
+    // car le système est stabilisé et le soleil se déplace lentemment
+    delay(delay_ok);  
+  }
+ 
+  } else {
+    #if PRINT_ENABLE  
+      Serial.println("MODE MANUEL:");
+    #endif
+    // Controle manuel des moteurs :
+    // Seul un bouton à la fois est pris en compte avec la priorité suivante:
+    //   1. gauche
+    //   2. droite
+    //   3. haut
+    //   4. bas
+     
+    // si le bouton gauche est appuyé
     if (not(digitalRead(TOR_left))) {
-      analogWrite(RPWM_Output, 0);
-      analogWrite(LPWM_Output, motor_speed);
+      motor_control (true, true, motor_speed);
+  
+    // si le bouton droite est appuyé
+    } else if (not(digitalRead(TOR_right))) {
+      motor_control (true, false, motor_speed);
+      
+    // si le bouton haut est appuyé
+    } else if (not(digitalRead(TOR_high))) {
+      motor_control (false, true, motor_speed);
+      
+    // si le bouton bas est appuyé
+    } else if (not(digitalRead(TOR_low))) {
+      motor_control (false, false, motor_speed);
+    
+    // sinon on ne fait rien
     } else {
-      analogWrite(LPWM_Output, 0);
-      if (not(digitalRead(TOR_right))) {
-        analogWrite(RPWM_Output, motor_speed);
-      } else {
-       analogWrite(RPWM_Output, 0); 
-      }
+      motor_control (true, true, 0);; 
     }
     
   }
-delay(delay_diff); 
+  delay(delay_diff); 
+}
+
+void azymut_motor_control ( bool is_left, int speed) {
+  // Si on va à gauche :
+  if (is_left) {
+    analogWrite(azymut_RPWM_Output, 0);     // d'abords on arrête la pwm de droite
+    analogWrite(azymut_LPWM_Output, speed); // puis on lance la pwm gauche
+    
+  // Sinon on va à droite :
+  } else {
+    analogWrite(azymut_LPWM_Output, 0);     // d'abords on arrête la pwm de gauche
+    analogWrite(azymut_RPWM_Output, speed); // puis on lance la pwm droite
+  }
+}
+
+void elevation_motor_control ( bool is_up, int speed) {
+  // Si on monte les mirroirs :
+  if (is_up) {
+    analogWrite(elev_RPWM_Output, 0);     // d'abords on arrête la pwm de du bas
+    analogWrite(elev_LPWM_Output, speed); // puis on lance la pwm du haut
+    
+  // Sinon on descend les mirroirs :
+  } else {
+    analogWrite(elev_LPWM_Output, 0);     // d'abords on arrête la pwm de du haut
+    analogWrite(elev_RPWM_Output, speed); // puis on lance la pwm du haut
+  }
+}
+
+void motor_control ( bool is_azymut, bool dir, int speed) {
+  
+  // les moteurs azymut ou élévation sont activés indépendamment,
+  // on arrête l'autre si on veut activé l'un
+  if (is_azymut) {
+    elevation_motor_control(true, 0);
+    azymut_motor_control(dir, speed);
+  } else {
+    azymut_motor_control(true, 0);
+    elevation_motor_control(dir, speed);
+  }
 }
