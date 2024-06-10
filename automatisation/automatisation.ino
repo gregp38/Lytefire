@@ -17,8 +17,8 @@ int elev_sens1_A0 = A6;
 int elev_sens1_A1 = A7; 
 
 // Définition des pins digitales des entrées des capteurs pour le contrôle manuel
-int TOR_high  = 15; 
-int TOR_low   = 14;
+int TOR_high  = 24; 
+int TOR_low   = 26;
 int TOR_mode  = 13; 
 int TOR_left  = 12; 
 int TOR_right = 11; 
